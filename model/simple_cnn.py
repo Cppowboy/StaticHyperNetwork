@@ -1,4 +1,5 @@
 import tensorflow as tf
+from model.utils import HyperCell
 
 
 class SimpleCNN(object):
@@ -12,7 +13,6 @@ class SimpleCNN(object):
         self.out_size = out_size
         self.batch_size = batch_size
         self.hyper_mode = hyper_mode
-        self.conv_weight_initializer = conv_weight_initializer
         if kernel_initializer is None:
             self.kernel_intializer = tf.orthogonal_initializer(1.0)
         else:
@@ -28,19 +28,21 @@ class SimpleCNN(object):
         out_size = self.out_size
         conv1_weights = tf.Variable(tf.truncated_normal([f_size, f_size, 1, out_size], stddev=0.01),
                                     name="conv1_weights")
-        if self.hyper_mode:
-            conv2_weights = self.conv_weight_initializer.create_conv_weight(in_size, out_size, embed_name='z_signal')
-        else:
-            conv2_weights = tf.Variable(tf.truncated_normal([f_size, f_size, in_size, out_size], stddev=0.01),
-                                        name="conv2_weights")
         conv1_biases = tf.Variable(tf.zeros([in_size]), name="conv1_biases")
-        conv2_biases = tf.Variable(tf.zeros([out_size]), name="conv2_biases")
 
         net = tf.nn.conv2d(batch_images, conv1_weights, strides=[1, 1, 1, 1], padding='SAME')
         net = tf.nn.relu(net + conv1_biases)
         net = tf.nn.max_pool(net, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
-        net = tf.nn.conv2d(net, conv2_weights, strides=[1, 1, 1, 1], padding='SAME')
-        net = tf.nn.relu(net + conv2_biases)
+        if self.hyper_mode:
+            hypercell = HyperCell(self.f_size, self.in_size, self.out_size, 4, name='hypercell')
+            net = hypercell.conv2d(net, out_size, kernel_size=f_size, stride=[1, 1, 1, 1], padding='SAME',
+                                   scope='conv2')
+        else:
+            conv2_weights = tf.Variable(tf.truncated_normal([f_size, f_size, in_size, out_size], stddev=0.01),
+                                        name="conv2_weights")
+            conv2_biases = tf.Variable(tf.zeros([out_size]), name="conv2_biases")
+            net = tf.nn.conv2d(net, conv2_weights, strides=[1, 1, 1, 1], padding='SAME') + conv2_biases
+        net = tf.nn.relu(net)
         net = tf.nn.max_pool(net, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
         # Reshapes the hidden units such that instead of 2D maps, they are 1D vectors:
         net = tf.layers.flatten(inputs=net)

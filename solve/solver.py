@@ -1,9 +1,8 @@
 import tensorflow as tf
 from datasets import Mnist, Cifar10
-from model import SimpleCNN
+from model import SimpleCNN, Resnet50
 from math import ceil
 import numpy as np
-from model.utils import ConvWeight
 
 
 class Solver(object):
@@ -14,9 +13,10 @@ class Solver(object):
             self.dataset = Cifar10()
         else:
             raise NotImplementedError
-        conv_weight_initializer = ConvWeight()
         if model == 'simplecnn':
-            self.model = SimpleCNN(conv_weight_initializer=conv_weight_initializer, hyper_mode=True)
+            self.model = SimpleCNN(hyper_mode=True)
+        elif model == 'resnet50':
+            self.model = Resnet50(hyper_mode=True, num_classes=self.dataset.num_classes)
         else:
             raise NotImplementedError
         self.x_dim = kwargs.pop('x_dim', 28)
@@ -87,5 +87,5 @@ class Solver(object):
 
 
 if __name__ == '__main__':
-    solver = Solver()
+    solver = Solver(model='resnet50', dataset='mnist')
     solver.train()
