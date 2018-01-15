@@ -214,7 +214,7 @@ def stack_blocks_dense(net,
                         rate *= unit.get('stride', 1)
 
                     else:
-                        net = block.unit_fn(net, rate=1, **unit)
+                        net = block.unit_fn(net, rate=1, hyper1=hyper1, hyper2=hyper2, **unit)
                         current_stride *= unit.get('stride', 1)
             net = utils.collect_named_outputs(outputs_collections, sc.name, net)
 

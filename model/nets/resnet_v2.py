@@ -126,9 +126,10 @@ def bottleneck(inputs,
                 activation_fn=None,
                 scope='conv3')
         else:
-            residual = hyper1.conv2d(preact, depth_bottleneck, [1, 1], stride=1, scope='conv1')
-            residual = hyper2.conv2d(residual, depth_bottleneck, 3, stride, scope='conv2')
-            residual = hyper1.conv2d(residual, depth, [1, 1], stride=1, scope='conv3')
+            residual = hyper1.conv2d(preact, depth_bottleneck, [1, 1], stride=[1, 1, 1, 1], scope='conv1')
+            residual = hyper2.conv2d(residual, depth_bottleneck, 3, [1, stride, stride, 1], scope='conv2',
+                                     padding='SAME')
+            residual = hyper1.conv2d(residual, depth, [1, 1], stride=[1, 1, 1, 1], scope='conv3')
 
         output = shortcut + residual
 

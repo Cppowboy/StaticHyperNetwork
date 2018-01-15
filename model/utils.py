@@ -87,7 +87,7 @@ class HyperCell(object):
             filters,
             kernel_size,
             stride=(1, 1),
-            padding='valid',
+            padding='VALID',
             use_bias=True,
             kernel_initializer=None,
             bias_initializer=tf.zeros_initializer(),
@@ -100,7 +100,7 @@ class HyperCell(object):
                                                bias_initializer=bias_initializer)
         outputs = tf.nn.conv2d(inputs, conv_weight, strides=stride, padding=padding, data_format='NHWC')
         if use_bias:
-            bias = tf.get_variable('bias', filters)
+            bias = tf.get_variable('%s_bias' % (scope), filters)
             outputs += bias
         return outputs
 
@@ -161,8 +161,8 @@ class HyperCell(object):
                     weight = tf.transpose(weight, [2, 3, 0, 1])  # (f_size, f_size, in_size, out_size)
                     out_list.append(weight)
                 # concat
-                out_weight = tf.concat(out_list, axis=3)
-                in_list.append(out_weight)
+            out_weight = tf.concat(out_list, axis=3)
+            in_list.append(out_weight)
         # concat
         conv_weight = tf.concat(in_list, axis=2)
         return conv_weight
