@@ -114,30 +114,30 @@ def bottleneck(inputs,
                 normalizer_fn=None,
                 activation_fn=None,
                 scope='shortcut')
-        if hyper1 is None or hyper2 is None:
-            residual = layers_lib.conv2d(
-                preact, depth_bottleneck, [1, 1], stride=1, scope='conv1')
-            residual = resnet_utils.conv2d_same(
-                residual, depth_bottleneck, 3, stride, rate=rate, scope='conv2')
-            residual = layers_lib.conv2d(
-                residual,
-                depth, [1, 1],
-                stride=1,
-                normalizer_fn=None,
-                activation_fn=None,
-                scope='conv3')
-        else:
-            residual = layers_lib.conv2d(
-                preact, depth_bottleneck, [1, 1], stride=1, scope='conv1', weights_initializer=hyper1)
-            residual = resnet_utils.conv2d_same(
-                residual, depth_bottleneck, 3, stride, rate=rate, scope='conv2', weight_initializer=hyper2)
-            residual = layers_lib.conv2d(
-                residual,
-                depth, [1, 1],
-                stride=1,
-                normalizer_fn=None,
-                activation_fn=None,
-                scope='conv3', weights_initializer=hyper1)
+        # if hyper1 is None or hyper2 is None:
+        #     residual = layers_lib.conv2d(
+        #         preact, depth_bottleneck, [1, 1], stride=1, scope='conv1')
+        #     residual = resnet_utils.conv2d_same(
+        #         residual, depth_bottleneck, 3, stride, rate=rate, scope='conv2')
+        #     residual = layers_lib.conv2d(
+        #         residual,
+        #         depth, [1, 1],
+        #         stride=1,
+        #         normalizer_fn=None,
+        #         activation_fn=None,
+        #         scope='conv3')
+        # else:
+        residual = layers_lib.conv2d(
+            preact, depth_bottleneck, [1, 1], stride=1, scope='conv1', weights_initializer=hyper1)
+        residual = resnet_utils.conv2d_same(
+            residual, depth_bottleneck, 3, stride, rate=rate, scope='conv2', weight_initializer=hyper2)
+        residual = layers_lib.conv2d(
+            residual,
+            depth, [1, 1],
+            stride=1,
+            normalizer_fn=None,
+            activation_fn=None,
+            scope='conv3', weights_initializer=hyper1)
 
         output = shortcut + residual
 
