@@ -1,5 +1,7 @@
 import tensorflow as tf
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops.init_ops import Initializer
+from tensorflow.python.framework import dtypes
 
 
 class ConvWeight(object):
@@ -166,3 +168,92 @@ class HyperCell(object):
         # concat
         conv_weight = tf.concat(in_list, axis=2)
         return conv_weight
+
+
+class Hyper(Initializer):
+    """Initializer that generates tensors with a uniform distribution.
+
+    Args:
+      minval: A python scalar or a scalar tensor. Lower bound of the range
+        of random values to generate.
+      maxval: A python scalar or a scalar tensor. Upper bound of the range
+        of random values to generate.  Defaults to 1 for float types.
+      seed: A Python integer. Used to create random seeds. See
+        @{tf.set_random_seed}
+        for behavior.
+      dtype: The data type.
+    """
+
+    def __init__(self, f_size=1, in_size=64, out_size=64, z_dim=64, dtype=dtypes.float32, name='Hyper'):
+        self.f_size = f_size
+        self.in_size = in_size
+        self.out_size = out_size
+        self.z_dim = z_dim
+        self.dtype = dtypes.as_dtype(dtype)
+        self.name = name
+        self.kernel_initializer = tf.orthogonal_initializer(1.0)
+        self.bias_initializer = tf.constant_initializer(0.0)
+        with tf.variable_scope(self.name):
+            w1 = tf.get_variable('w1', shape=[self.z_dim, self.in_size * self.z_dim],
+                                 dtype=tf.float32, initializer=self.kernel_initializer)
+            b1 = tf.get_variable('b1', shape=[self.in_size * self.z_dim],
+                                 dtype=tf.float32, initializer=self.bias_initializer)
+            w2 = tf.get_variable('w2', shape=[self.z_dim, self.f_size * self.out_size * self.f_size],
+                                 dtype=tf.float32, initializer=self.kernel_initializer)
+            b2 = tf.get_variable('b2', shape=[self.f_size * self.out_size * self.f_size],
+                                 dtype=tf.float32, initializer=self.bias_initializer)
+
+    def __call__(self, shape, dtype=None, partition_info=None):
+        if dtype is None:
+            dtype = self.dtype
+        k1_size, k2_size, dim_in, dim_out = shape
+        if not (self.f_size == k1_size and self.f_size == k2_size):
+            raise Exception('kernel size error')
+        if dim_in % self.in_size != 0:
+            raise Exception('dim_in%%in_size=%d' % (dim_in % self.in_size))
+        if dim_out % self.out_size != 0:
+            raise Exception('dim_out%%out_size=%d' % (dim_out % self.out_size))
+        # embedding vector
+        emb = tf.Variable(tf.random_normal([dim_in // self.in_size, dim_out // self.out_size, self.z_dim], dtype=dtype))
+
+        in_list = []
+        for i in range(dim_in // self.in_size):
+            out_list = []
+            for j in range(dim_out // self.out_size):
+                with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
+                    # create embedding
+                    row = tf.nn.embedding_lookup(emb, i)
+                    z = tf.nn.embedding_lookup(row, j)
+                    # load hypyer params
+                    w1 = tf.get_variable('w1', shape=[self.z_dim, self.in_size * self.z_dim],
+                                         dtype=dtype, initializer=self.kernel_initializer)
+                    b1 = tf.get_variable('b1', shape=[self.in_size * self.z_dim],
+                                         dtype=dtype, initializer=self.bias_initializer)
+                    w2 = tf.get_variable('w2', shape=[self.z_dim, self.f_size * self.out_size * self.f_size],
+                                         dtype=dtype, initializer=self.kernel_initializer)
+                    b2 = tf.get_variable('b2', shape=[self.f_size * self.out_size * self.f_size],
+                                         dtype=dtype, initializer=self.bias_initializer)
+                    z = tf.reshape(z, [-1, self.z_dim])
+                    # create conv weight
+                    a = tf.matmul(z, w1) + b1
+                    a = tf.reshape(a, [self.in_size, self.z_dim])
+                    weight = tf.matmul(a, w2) + b2
+                    weight = tf.reshape(weight, [self.in_size, self.out_size, self.f_size, self.f_size])
+                    weight = tf.transpose(weight, [2, 3, 0, 1])  # (f_size, f_size, in_size, out_size)
+                    out_list.append(weight)
+                # concat
+            out_weight = tf.concat(out_list, axis=3)
+            in_list.append(out_weight)
+        # concat
+        conv_weight = tf.concat(in_list, axis=2)
+        return conv_weight
+
+    def get_config(self):
+        return {
+            'f_size': self.f_size,
+            'in_size': self.in_size,
+            'out_size': self.out_size,
+            'z_dim': self.z_dim,
+            'name': self.name,
+            "dtype": self.dtype.name
+        }

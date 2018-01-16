@@ -1,5 +1,7 @@
 import tensorflow as tf
 from model.utils import HyperCell
+from model.utils import Hyper
+import tensorflow.contrib.slim as slim
 
 
 class SimpleCNN(object):
@@ -34,9 +36,11 @@ class SimpleCNN(object):
         net = tf.nn.relu(net + conv1_biases)
         net = tf.nn.max_pool(net, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='VALID')
         if self.hyper_mode:
-            hypercell = HyperCell(self.f_size, self.in_size, self.out_size, 4, name='hypercell')
-            net = hypercell.conv2d(net, out_size, kernel_size=f_size, stride=[1, 1, 1, 1], padding='SAME',
-                                   scope='conv2')
+            # hypercell = HyperCell(self.f_size, self.in_size, self.out_size, 4, name='hypercell')
+            # net = hypercell.conv2d(net, out_size, kernel_size=f_size, stride=[1, 1, 1, 1], padding='SAME',
+            #                        scope='conv2')
+            hyper = Hyper(f_size=f_size, in_size=in_size, out_size=out_size, z_dim=4, name='Hyper')
+            net = slim.layers.conv2d(net, out_size, kernel_size=[7, 7], stride=1, weights_initializer=hyper)
         else:
             conv2_weights = tf.Variable(tf.truncated_normal([f_size, f_size, in_size, out_size], stddev=0.01),
                                         name="conv2_weights")
