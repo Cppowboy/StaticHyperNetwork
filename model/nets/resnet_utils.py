@@ -84,7 +84,7 @@ def subsample(inputs, factor, scope=None):
         return layers.max_pool2d(inputs, [1, 1], stride=factor, scope=scope)
 
 
-def conv2d_same(inputs, num_outputs, kernel_size, stride, rate=1, scope=None, weight_initializer=None):
+def conv2d_same(inputs, num_outputs, kernel_size, stride, rate=1, scope=None, weights_initializer=None):
     """Strided 2-D convolution with 'SAME' padding.
 
     When stride > 1, then we do explicit zero-padding, followed by conv2d with
@@ -128,7 +128,7 @@ def conv2d_same(inputs, num_outputs, kernel_size, stride, rate=1, scope=None, we
             stride=1,
             rate=rate,
             padding='SAME',
-            scope=scope, weights_initializer=weight_initializer)
+            scope=scope, weights_initializer=weights_initializer)
     else:
         kernel_size_effective = kernel_size + (kernel_size - 1) * (rate - 1)
         pad_total = kernel_size_effective - 1
@@ -143,7 +143,7 @@ def conv2d_same(inputs, num_outputs, kernel_size, stride, rate=1, scope=None, we
             stride=stride,
             rate=rate,
             padding='VALID',
-            scope=scope, weights_initializer=weight_initializer)
+            scope=scope, weights_initializer=weights_initializer)
 
 
 @add_arg_scope

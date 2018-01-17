@@ -28,6 +28,7 @@ class Solver(object):
         self.lr_decay = kwargs.pop('lr_decay', 0.99)
         self.grad_clip = kwargs.pop('grad_clip', 100.0)
         self.optimize_method = kwargs.pop('optimizer', 'adam')
+        self.logpath = kwargs.pop('logpath', 'log')
 
     def train(self):
         x_train, y_train = self.dataset.x_train, self.dataset.y_train
@@ -51,8 +52,19 @@ class Solver(object):
         grads, _ = tf.clip_by_global_norm(tf.gradients(loss_op, tvars), self.grad_clip)
         train_op = optimizer.apply_gradients(zip(grads, tvars), global_step=global_step)
 
+        for var in tvars:
+            tf.summary.histogram(var.op.name, var)
+        for grad, var in zip(grads, tvars):
+            if grad is not None:
+                tf.summary.histogram(var.op.name + '/gradient', grad)
+        # Create a summary to monitor cost tensor
+        tf.summary.scalar("loss", loss_op)
+        # Merge all summaries into a single op
+        merged_summary_op = tf.summary.merge_all()
+
         sess = tf.Session()
         sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
+        summary_writer = tf.summary.FileWriter(self.logpath, graph=tf.get_default_graph())
         for epoch in range(self.max_epoch):
             # shuffle data
             permutation = np.random.permutation(n_samples)
@@ -61,8 +73,9 @@ class Solver(object):
             for i in range(n_iterations):
                 batch_x = x_train[i * self.batch_size:(i + 1) * self.batch_size]
                 batch_y = y_train[i * self.batch_size:(i + 1) * self.batch_size]
-                _, loss = sess.run([train_op, loss_op],
-                                   feed_dict={batch_images: batch_x, batch_labels: batch_y})
+                _, loss, summary_str = sess.run([train_op, loss_op, merged_summary_op],
+                                                feed_dict={batch_images: batch_x, batch_labels: batch_y})
+                summary_writer.add_summary(summary_str, epoch * n_iterations + i)
             train_loss, train_acc = self.evaluate_in_batch(x_train, y_train, sess, loss_op, predict_op, batch_images,
                                                            batch_labels)
             test_loss, test_acc = self.evaluate_in_batch(x_test, y_test, sess, loss_op, predict_op, batch_images,

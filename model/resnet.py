@@ -1,6 +1,5 @@
 from model.nets.resnet_v2 import resnet_v2_50
 import tensorflow as tf
-from model.utils import HyperCell
 
 
 class Resnet50(object):

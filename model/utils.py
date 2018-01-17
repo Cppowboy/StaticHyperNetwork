@@ -170,7 +170,7 @@ class HyperCell(object):
         return conv_weight
 
 
-class Hyper(Initializer):
+class Hyper(object):
     """Initializer that generates tensors with a uniform distribution.
 
     Args:
@@ -191,19 +191,21 @@ class Hyper(Initializer):
         self.z_dim = z_dim
         self.dtype = dtypes.as_dtype(dtype)
         self.name = name
-        self.kernel_initializer = tf.orthogonal_initializer(1.0)
+        self.kernel_initializer = tf.truncated_normal_initializer(stddev=0.01)
         self.bias_initializer = tf.constant_initializer(0.0)
         with tf.variable_scope(self.name):
-            w1 = tf.get_variable('w1', shape=[self.z_dim, self.in_size * self.z_dim],
-                                 dtype=tf.float32, initializer=self.kernel_initializer)
-            b1 = tf.get_variable('b1', shape=[self.in_size * self.z_dim],
-                                 dtype=tf.float32, initializer=self.bias_initializer)
-            w2 = tf.get_variable('w2', shape=[self.z_dim, self.f_size * self.out_size * self.f_size],
-                                 dtype=tf.float32, initializer=self.kernel_initializer)
-            b2 = tf.get_variable('b2', shape=[self.f_size * self.out_size * self.f_size],
-                                 dtype=tf.float32, initializer=self.bias_initializer)
+            # create embedding
+            # load hypyer params
+            self.w1 = tf.get_variable('w1', shape=[self.z_dim, self.in_size * self.z_dim],
+                                      dtype=dtype, initializer=self.kernel_initializer)
+            self.b1 = tf.get_variable('b1', shape=[self.in_size * self.z_dim],
+                                      dtype=dtype, initializer=self.bias_initializer)
+            self.w2 = tf.get_variable('w2', shape=[self.z_dim, self.f_size * self.out_size * self.f_size],
+                                      dtype=dtype, initializer=self.kernel_initializer)
+            self.b2 = tf.get_variable('b2', shape=[self.f_size * self.out_size * self.f_size],
+                                      dtype=dtype, initializer=self.bias_initializer)
 
-    def __call__(self, shape, dtype=None, partition_info=None):
+    def _create_conv_weight(self, shape, dtype=None):
         if dtype is None:
             dtype = self.dtype
         k1_size, k2_size, dim_in, dim_out = shape
@@ -214,38 +216,30 @@ class Hyper(Initializer):
         if dim_out % self.out_size != 0:
             raise Exception('dim_out%%out_size=%d' % (dim_out % self.out_size))
         # embedding vector
-        emb = tf.Variable(tf.random_normal([dim_in // self.in_size, dim_out // self.out_size, self.z_dim], dtype=dtype))
+        emb = tf.Variable(
+            tf.random_normal([dim_in // self.in_size, dim_out // self.out_size, self.z_dim], dtype=dtype, stddev=0.01),
+            name='emb')
 
         in_list = []
         for i in range(dim_in // self.in_size):
             out_list = []
             for j in range(dim_out // self.out_size):
-                with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
-                    # create embedding
-                    row = tf.nn.embedding_lookup(emb, i)
-                    z = tf.nn.embedding_lookup(row, j)
-                    # load hypyer params
-                    w1 = tf.get_variable('w1', shape=[self.z_dim, self.in_size * self.z_dim],
-                                         dtype=dtype, initializer=self.kernel_initializer)
-                    b1 = tf.get_variable('b1', shape=[self.in_size * self.z_dim],
-                                         dtype=dtype, initializer=self.bias_initializer)
-                    w2 = tf.get_variable('w2', shape=[self.z_dim, self.f_size * self.out_size * self.f_size],
-                                         dtype=dtype, initializer=self.kernel_initializer)
-                    b2 = tf.get_variable('b2', shape=[self.f_size * self.out_size * self.f_size],
-                                         dtype=dtype, initializer=self.bias_initializer)
-                    z = tf.reshape(z, [-1, self.z_dim])
-                    # create conv weight
-                    a = tf.matmul(z, w1) + b1
-                    a = tf.reshape(a, [self.in_size, self.z_dim])
-                    weight = tf.matmul(a, w2) + b2
-                    weight = tf.reshape(weight, [self.in_size, self.out_size, self.f_size, self.f_size])
-                    weight = tf.transpose(weight, [2, 3, 0, 1])  # (f_size, f_size, in_size, out_size)
-                    out_list.append(weight)
+                row = tf.nn.embedding_lookup(emb, i)
+                z = tf.nn.embedding_lookup(row, j)
+                w1, b1, w2, b2 = self.w1, self.b1, self.w2, self.b2
+                z = tf.reshape(z, [-1, self.z_dim])
+                # create conv weight
+                a = tf.matmul(z, w1) + b1
+                a = tf.reshape(a, [self.in_size, self.z_dim])
+                weight = tf.matmul(a, w2) + b2
+                weight = tf.reshape(weight, [self.in_size, self.out_size, self.f_size, self.f_size])
+                out_list.append(weight)
                 # concat
-            out_weight = tf.concat(out_list, axis=3)
+            out_weight = tf.concat(out_list, axis=1)
             in_list.append(out_weight)
         # concat
-        conv_weight = tf.concat(in_list, axis=2)
+        conv_weight = tf.concat(in_list, axis=0)
+        conv_weight = tf.transpose(conv_weight, [2, 3, 0, 1])
         return conv_weight
 
     def get_config(self):
@@ -257,3 +251,59 @@ class Hyper(Initializer):
             'name': self.name,
             "dtype": self.dtype.name
         }
+
+    def conv2d(
+            self,
+            inputs,
+            filters,
+            kernel_size,
+            stride=(1, 1),
+            padding='VALID',
+            use_bias=True,
+            kernel_initializer=None,
+            bias_initializer=tf.zeros_initializer(),
+            scope=None):
+        if kernel_size != self.f_size and kernel_size != [self.f_size, self.f_size]:
+            raise Exception('kernel_size must be the same with f_size')
+        dim_in = inputs.get_shape().as_list()[-1]
+        # create conv weight
+        conv_weight = self._create_conv_weight([self.f_size, self.f_size, dim_in, filters], dtype=tf.float32)
+        if type(stride) == int:
+            outputs = tf.nn.conv2d(inputs, conv_weight, strides=[1, stride, stride, 1], padding=padding,
+                                   data_format='NHWC')
+        elif len(stride) == 2:
+            outputs = tf.nn.conv2d(inputs, conv_weight, strides=[1, stride[0], stride[1], 1], padding=padding,
+                                   data_format='NHWC')
+        elif len(stride) == 4:
+            outputs = tf.nn.conv2d(inputs, conv_weight, strides=stride, padding=padding, data_format='NCHW')
+        else:
+            raise Exception('stride error')
+        if use_bias:
+            bias = tf.get_variable('%s_bias' % (scope), filters, initializer=bias_initializer)
+            outputs += bias
+        return outputs
+
+    def conv2d_same(self, inputs, num_outputs, kernel_size, stride, rate=1, scope=None):
+        if stride == 1:
+            return self.conv2d(
+                inputs,
+                num_outputs,
+                kernel_size,
+                stride=1,
+                padding='SAME',
+                scope=scope)
+        else:
+            kernel_size_effective = kernel_size + (kernel_size - 1) * (rate - 1)
+            pad_total = kernel_size_effective - 1
+            pad_beg = pad_total // 2
+            pad_end = pad_total - pad_beg
+            inputs = array_ops.pad(
+                inputs, [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
+            return self.conv2d(
+                inputs,
+                num_outputs,
+                kernel_size,
+                stride=stride,
+                padding='VALID',
+                scope=scope
+            )
